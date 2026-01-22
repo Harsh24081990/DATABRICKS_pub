@@ -1,4 +1,4 @@
-```
+```python
 def run_sql_file(file_path: str, params: dict = None):
     with open(file_path, "r") as f:
         sql_text = f.read()
