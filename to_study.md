@@ -1,2 +1,3 @@
 - **.option(fetchsize)** --> while reading from large datasets , specially from onprem.
-- 
+  - (JDBC driver manages it internally. oracle creates a server side cursor for that query for N rows. once N rows are fetched, cursor moves forwared to mark the next set of rows to be picked by.
+-----------
