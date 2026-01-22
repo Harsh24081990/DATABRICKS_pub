@@ -1,0 +1,2 @@
+- **.option(fetchsize)** --> while reading from large datasets , specially from onprem.
+- 
