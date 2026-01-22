@@ -1,3 +1,16 @@
+```
+def run_sql_file(file_path: str, params: dict = None):
+    with open(file_path, "r") as f:
+        sql_text = f.read()
+
+    if params:
+        for k, v in params.items():
+            sql_text = sql_text.replace(f"${{{k}}}", str(v))
+
+    spark.sql(sql_text)
+```
+
+
 Let’s break this **line by line and word by word**, starting with the **function definition**, then the **body**. I’ll keep it clear and practical.
 
 ---
