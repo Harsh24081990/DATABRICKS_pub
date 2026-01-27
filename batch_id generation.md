@@ -87,59 +87,113 @@ Example:
 a3f1b0c4-6c2e-4b55-9b30-2a5f2d6a8d91
 ```
 
-Use when:
+-------------------
 
-* Distributed triggers
-* Parallel pipelines
-* Cross-system uniqueness required
 
-❌ Harder to read/debug
+1. **If `batch_id` is generated directly in SQL while inserting into STG, what type is it?**
+2. **How to insert `load_timestamp` into STG when data comes from an Oracle temp view**
 
----
-
-## ❌ Not Recommended Approaches
-
-| Method                | Why avoid              |
-| --------------------- | ---------------------- |
-| Random number         | Collision risk         |
-| Table MAX(batch_id)+1 | Race conditions        |
-| Auto-increment        | Not supported in Delta |
-| Process_date          | Not unique             |
+I’ll answer both **clearly and briefly**, with copy-paste SQL.
 
 ---
 
-## Best Practice Recommendation (Your Case)
+## 1️⃣ Generating `batch_id` DIRECTLY IN SQL (Type Explained)
 
-Since you:
+### Example: generate batch_id in SQL
 
-* Run **incremental batch jobs**
-* Use **control tables**
-* Want **auditability**
-
-👉 **Use timestamp-based batch_id (Python or SQL)**
-
-Example:
-
-```python
-batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
+```sql
+SELECT date_format(current_timestamp(), 'yyyyMMddHHmmss') AS batch_id;
 ```
 
-Store it in:
+### What is the datatype?
 
-* `stg.fin_trans_fact_ctrl`
-* audit tables
-* logs
+➡ **STRING**
+
+In Spark SQL:
+
+* `date_format(...)` **always returns STRING**
+* Even though it looks like a timestamp, it is **not**
+
+So inserting like this is **perfectly fine**:
+
+```sql
+INSERT INTO stg.fin_trans_fact
+SELECT
+  f.*,
+  date_format(current_timestamp(), 'yyyyMMddHHmmss') AS batch_id,
+  current_timestamp() AS load_ts
+FROM fin_trans_fact_inc f;
+```
+
+✔ `batch_id` → STRING
+✔ `load_ts` → TIMESTAMP
 
 ---
 
-## One-Line Summary
+## 2️⃣ Inserting `load_timestamp` from Oracle Temp View
 
-> **A batch_id should be unique, sortable, and easy to trace — timestamp-based IDs are the best default.**
+You said:
 
-If you want, I can:
+> *“oracle temp view created”*
 
-* Add batch_id generation into your existing pipeline code
-* Show how to guarantee uniqueness across parallel runs
-* Compare SQL vs Python generation in Databricks Jobs
+That means something like:
 
-Just say 👍
+```python
+oracle_df.createOrReplaceTempView("fin_trans_fact_inc")
+```
+
+Now in SQL you simply **add system-generated columns**.
+
+---
+
+### Correct STAGE Insert SQL (FINAL)
+
+```sql
+INSERT INTO stg.fin_trans_fact
+SELECT
+  f.*,
+  date_format(current_timestamp(), 'yyyyMMddHHmmss') AS batch_id,
+  current_timestamp() AS load_ts
+FROM fin_trans_fact_inc f;
+```
+
+---
+
+## 3️⃣ Important Note (Consistency)
+
+If you generate `batch_id` **inside SQL**, then:
+
+* Use the **same expression everywhere**
+* OR (better) capture it once
+
+### Best practice (recommended)
+
+Capture it once:
+
+```sql
+SELECT date_format(current_timestamp(), 'yyyyMMddHHmmss') AS batch_id;
+```
+
+Store it in Python:
+
+```python
+batch_id = spark.sql(
+    "SELECT date_format(current_timestamp(), 'yyyyMMddHHmmss')"
+).collect()[0][0]
+```
+
+Then pass `${batch_id}` everywhere.
+
+---
+
+## 4️⃣ Why not generate batch_id separately in each SQL?
+
+❌ Multiple SQL files → slightly different timestamps
+❌ STG and CTRL batch_id mismatch
+
+So **generate once, reuse everywhere**.
+
+---
+
+
+
